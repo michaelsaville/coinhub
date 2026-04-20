@@ -1,0 +1,21 @@
+{
+  "name": "coinhub",
+  "version": "0.1.0",
+  "description": "Mobile-first PWA for personal coin collection",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "import:dry": "node scripts/import.js --dry-run",
+    "import:apply": "node scripts/import.js --apply",
+    "probe": "node scripts/probe.js",
+    "migrate": "node scripts/migrate.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "pg": "^8.13.1",
+    "xlsx": "^0.18.5"
+  }
+}
