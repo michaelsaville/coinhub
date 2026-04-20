@@ -1,0 +1,14 @@
+<%- include('_head') %>
+  <h1>Series</h1>
+  <ul class="series">
+    <% series.forEach(s => { %>
+      <li>
+        <a href="/series/<%= s.id %>">
+          <span class="name"><%= s.name %></span>
+          <span class="type"><%= s.type_name %><% if (s.start_year) { %> · <%= s.start_year %>–<%= s.end_year ?? 'now' %><% } %></span>
+          <span class="count"><%= s.count %></span>
+        </a>
+      </li>
+    <% }) %>
+  </ul>
+<%- include('_foot') %>

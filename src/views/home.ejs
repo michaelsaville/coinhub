@@ -1,0 +1,38 @@
+<%- include('_head') %>
+  <form class="search" action="/search" method="get" autocomplete="off">
+    <input type="search" name="q" placeholder="Search year, series, serial…" autofocus inputmode="search" />
+    <button type="submit">Find</button>
+  </form>
+
+  <section class="cards">
+    <div class="card">
+      <div class="label">Coins</div>
+      <div class="value"><%= totals.total_coins.toLocaleString() %></div>
+    </div>
+    <div class="card">
+      <div class="label">Series held</div>
+      <div class="value"><%= totals.active_series %></div>
+    </div>
+    <div class="card">
+      <div class="label">Paid</div>
+      <div class="value">$<%= Number(totals.total_paid).toLocaleString() %></div>
+    </div>
+    <div class="card">
+      <div class="label">Book</div>
+      <div class="value">$<%= Number(totals.total_book).toLocaleString() %></div>
+    </div>
+  </section>
+
+  <h2>Collection by series</h2>
+  <ul class="series">
+    <% bySeries.forEach(s => { %>
+      <li>
+        <a href="/series/<%= s.id %>">
+          <span class="name"><%= s.name %></span>
+          <span class="type"><%= s.type_name %></span>
+          <span class="count"><%= s.count %></span>
+        </a>
+      </li>
+    <% }) %>
+  </ul>
+<%- include('_foot') %>

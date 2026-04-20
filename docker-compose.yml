@@ -17,5 +17,21 @@ services:
       timeout: 3s
       retries: 10
 
+  app:
+    build: .
+    container_name: coinhub-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://coinhub:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/coinhub
+      COINHUB_USER: ${COINHUB_USER:-michael}
+      COINHUB_PASSWORD: ${COINHUB_PASSWORD:?COINHUB_PASSWORD must be set in .env}
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3005:3000"
+
 volumes:
   coinhub_pgdata:

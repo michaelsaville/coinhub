@@ -1,0 +1,26 @@
+<%- include('_head') %>
+  <form class="search" action="/search" method="get" autocomplete="off">
+    <input type="search" name="q" value="<%= q %>" autofocus inputmode="search" />
+    <button type="submit">Find</button>
+  </form>
+
+  <p class="meta"><%= results.length %> result<%= results.length === 1 ? '' : 's' %> for “<%= q %>”<%= results.length === 500 ? ' (capped)' : '' %></p>
+
+  <% if (results.length === 0) { %>
+    <p>No matches. Try a year (e.g. <code>1926</code>), a serial fragment, or a series name.</p>
+  <% } else { %>
+    <ul class="results">
+      <% results.forEach(r => { %>
+        <li>
+          <a href="/coins/<%= r.id %>">
+            <span class="year"><%= r.year ?? '—' %></span>
+            <span class="mint"><%= r.mint ?? '' %></span>
+            <span class="series"><%= r.series ?? '(unassigned)' %></span>
+            <span class="grade"><%= r.grade ?? '' %></span>
+            <span class="serial"><%= r.serial %></span>
+          </a>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+<%- include('_foot') %>

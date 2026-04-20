@@ -1,0 +1,18 @@
+<%- include('_head') %>
+  <p><a href="/series">&larr; all series</a></p>
+  <h1><%= series.name %></h1>
+  <p class="meta"><%= series.type_name %><% if (series.start_year) { %> · <%= series.start_year %>–<%= series.end_year ?? 'now' %><% } %> · <%= coins.length %> coin<%= coins.length === 1 ? '' : 's' %></p>
+
+  <ul class="results">
+    <% coins.forEach(c => { %>
+      <li>
+        <a href="/coins/<%= c.id %>">
+          <span class="year"><%= c.year ?? '—' %></span>
+          <span class="mint"><%= c.mint ?? '' %></span>
+          <span class="grade"><%= c.grade ?? '' %></span>
+          <span class="serial"><%= c.serial %></span>
+        </a>
+      </li>
+    <% }) %>
+  </ul>
+<%- include('_foot') %>

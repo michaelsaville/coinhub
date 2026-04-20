@@ -1,0 +1,27 @@
+<%- include('_head') %>
+  <p><a href="javascript:history.back()">&larr; back</a></p>
+
+  <h1><%= coin.year ?? '—' %> <%= coin.series ?? '(unassigned)' %> <%= coin.mint_code ?? '' %></h1>
+  <p class="meta"><code><%= coin.serial %></code></p>
+
+  <dl class="detail">
+    <dt>Type</dt><dd><%= coin.type_name ?? '—' %></dd>
+    <dt>Series</dt><dd><%= coin.series ?? '—' %></dd>
+    <dt>Year</dt><dd><%= coin.year ?? '—' %></dd>
+    <dt>Mint</dt><dd><%= coin.mint_code ? `${coin.mint_code} — ${coin.mint_name}` : '—' %></dd>
+    <dt>Grade</dt><dd><%= coin.grade ?? '—' %> <% if (coin.category) { %><span class="muted">(<%= coin.category %>)</span><% } %></dd>
+    <dt>Qty</dt><dd><%= coin.qty ?? 1 %></dd>
+    <dt>Paid</dt><dd><%= coin.paid != null ? '$' + Number(coin.paid).toFixed(2) : '—' %></dd>
+    <dt>Book</dt><dd><%= coin.book_value != null ? '$' + Number(coin.book_value).toFixed(2) : '—' %></dd>
+    <% if (coin.slab_serial) { %>
+      <dt>Slab</dt><dd><%= coin.grading_service ?? '' %> <%= coin.slab_serial %> <%= coin.grade_detail ?? '' %></dd>
+    <% } %>
+    <% if (coin.country_code && coin.country_code !== 'US') { %>
+      <dt>Country</dt><dd><%= coin.country_code %></dd>
+    <% } %>
+    <% if (coin.comment_1) { %><dt>Note</dt><dd><%= coin.comment_1 %></dd><% } %>
+    <% if (coin.comment_2) { %><dt>Note</dt><dd><%= coin.comment_2 %></dd><% } %>
+    <% if (coin.photo_filename) { %><dt>Photo ref</dt><dd class="muted"><%= coin.photo_filename %></dd><% } %>
+    <dt>Added</dt><dd class="muted"><%= new Date(coin.created_at).toISOString().slice(0,10) %></dd>
+  </dl>
+<%- include('_foot') %>
