@@ -25,6 +25,39 @@
     <dt>Added</dt><dd class="muted"><%= new Date(coin.created_at).toISOString().slice(0,10) %></dd>
   </dl>
 
+  <% if (attrs && attrs.length > 0) { %>
+    <h2>Custom fields</h2>
+    <form action="/coins/<%= coin.id %>/attributes" method="post" class="attr-form">
+      <% attrs.forEach(a => { %>
+        <label>
+          <span><%= a.label %><% if (a.unit) { %> <em class="muted">(<%= a.unit %>)</em><% } %></span>
+          <input
+            type="<%= a.type === 'NUMBER' ? 'number' : a.type === 'DATE' ? 'date' : 'text' %>"
+            <% if (a.type === 'NUMBER') { %>step="any" inputmode="decimal"<% } %>
+            name="attr_<%= a.key %>"
+            value="<%= a.value || '' %>"
+            placeholder="<%= a.hint || '' %>" />
+        </label>
+      <% }) %>
+      <div class="attr-actions">
+        <button type="submit">Save fields</button>
+        <a href="/fields" class="muted-link">manage fields →</a>
+      </div>
+    </form>
+    <style>
+      .attr-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 10px 0 20px; }
+      @media (max-width: 520px) { .attr-form { grid-template-columns: 1fr; } }
+      .attr-form label { display: flex; flex-direction: column; }
+      .attr-form label > span { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+      .attr-form label > span em { font-style: normal; text-transform: none; letter-spacing: 0; }
+      .attr-form input { padding: 8px 10px; min-height: 40px; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; }
+      .attr-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+      .attr-actions { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; }
+      .attr-actions button { padding: 10px 18px; background: var(--accent); color: var(--bg); border: 0; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.9rem; }
+      .muted-link { color: var(--muted); font-size: 0.85rem; }
+    </style>
+  <% } %>
+
   <h2>Purchases (<%= purchases.length %>)</h2>
   <% if (purchases.length === 0) { %>
     <p class="muted">No purchase history yet.</p>

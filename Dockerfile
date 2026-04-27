@@ -6,6 +6,7 @@ COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund
 
 COPY src ./src
+COPY scripts ./scripts
 
 # The import wizard writes session files to /app/data/import-sessions/
 # during multi-step uploads. Pre-create with `node` ownership so the

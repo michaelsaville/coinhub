@@ -91,7 +91,7 @@ app.get('/coins/:id(\\d+)', async (req, res, next) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.sendStatus(400);
   try {
-    const [{ rows }, { rows: purchases }] = await Promise.all([
+    const [{ rows }, { rows: purchases }, { rows: attrs }] = await Promise.all([
       pool.query(`
         SELECT c.*, s.name AS series, t.name AS type_name,
                m.code AS mint_code, m.name AS mint_name,
@@ -109,9 +109,18 @@ app.get('/coins/:id(\\d+)', async (req, res, next) => {
         WHERE coin_id = $1
         ORDER BY purchase_date DESC NULLS LAST, created_at DESC
       `, [id]),
+      // Left-join all defs against this coin's values so the form
+      // surfaces every defined field — even ones with no value yet.
+      pool.query(`
+        SELECT d.id AS def_id, d.key, d.label, d.type, d.unit, d.hint,
+               d.sort_order, a.value
+        FROM coin_attribute_defs d
+        LEFT JOIN coin_attributes a ON a.def_id = d.id AND a.coin_id = $1
+        ORDER BY d.sort_order, d.label
+      `, [id]),
     ]);
     if (!rows[0]) return res.sendStatus(404);
-    res.render('detail', { coin: rows[0], purchases, title: rows[0].serial });
+    res.render('detail', { coin: rows[0], purchases, attrs, title: rows[0].serial });
   } catch (e) { next(e); }
 });
 
@@ -312,6 +321,107 @@ app.post('/coins', async (req, res, next) => {
   } finally {
     client.release();
   }
+});
+
+// ─── Custom fields (registry) ───────────────────────────────────────
+//
+// Each row in coin_attribute_defs becomes an editable input on every
+// coin's detail page. Adding a new field is a single form submission
+// here — no schema change, no UI redeploy. Per-coin values live in
+// coin_attributes (TEXT regardless of declared type; UI casts).
+
+app.get('/fields', async (req, res, next) => {
+  try {
+    const { rows: defs } = await pool.query(`
+      SELECT d.id, d.key, d.label, d.type, d.unit, d.hint, d.sort_order,
+             COUNT(a.id)::int AS filled_count,
+             (SELECT COUNT(*)::int FROM coins) - COUNT(a.id)::int AS missing_count
+      FROM coin_attribute_defs d
+      LEFT JOIN coin_attributes a ON a.def_id = d.id AND a.value IS NOT NULL AND a.value != ''
+      GROUP BY d.id
+      ORDER BY d.sort_order, d.label
+    `);
+    res.render('fields', {
+      title: 'Custom fields',
+      defs,
+      saved: req.query.saved === '1',
+    });
+  } catch (e) { next(e); }
+});
+
+app.post('/fields', async (req, res, next) => {
+  const key = (req.body.key || '').toString().trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  const label = (req.body.label || '').toString().trim();
+  const type = ['TEXT', 'NUMBER', 'DATE'].includes(req.body.type) ? req.body.type : 'TEXT';
+  const unit = (req.body.unit || '').toString().trim() || null;
+  const hint = (req.body.hint || '').toString().trim() || null;
+  if (!key || !label) return res.redirect('/fields?error=missing');
+  try {
+    await pool.query(
+      `INSERT INTO coin_attribute_defs (key, label, type, unit, hint, sort_order)
+       VALUES ($1, $2, $3, $4, $5,
+               COALESCE((SELECT MAX(sort_order) + 10 FROM coin_attribute_defs), 10))
+       ON CONFLICT (key) DO UPDATE SET
+         label = EXCLUDED.label,
+         type = EXCLUDED.type,
+         unit = EXCLUDED.unit,
+         hint = EXCLUDED.hint`,
+      [key, label, type, unit, hint],
+    );
+    res.redirect('/fields?saved=1');
+  } catch (e) { next(e); }
+});
+
+app.post('/fields/:id/delete', async (req, res, next) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.sendStatus(400);
+  try {
+    // Cascade deletes the per-coin values, intentional — removing a
+    // field means removing all data captured against it.
+    await pool.query('DELETE FROM coin_attribute_defs WHERE id = $1', [id]);
+    res.redirect('/fields?saved=1');
+  } catch (e) { next(e); }
+});
+
+// Bulk-update all custom-field values for a single coin. Posted from
+// the coin detail page's edit form. Empty value → DELETE the row
+// (revert to "no value set"), so blanking the input clears it.
+app.post('/coins/:id(\\d+)/attributes', async (req, res, next) => {
+  const coinId = parseInt(req.params.id, 10);
+  try {
+    const { rows: defs } = await pool.query(
+      'SELECT id, key FROM coin_attribute_defs',
+    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const def of defs) {
+        const raw = req.body[`attr_${def.key}`];
+        const value = raw == null ? null : String(raw).trim();
+        if (!value) {
+          await client.query(
+            'DELETE FROM coin_attributes WHERE coin_id = $1 AND def_id = $2',
+            [coinId, def.id],
+          );
+        } else {
+          await client.query(
+            `INSERT INTO coin_attributes (coin_id, def_id, value, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (coin_id, def_id)
+             DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+            [coinId, def.id, value],
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
+    res.redirect(`/coins/${coinId}`);
+  } catch (e) { next(e); }
 });
 
 app.get('/series', async (_req, res, next) => {

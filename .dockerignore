@@ -7,4 +7,6 @@ data/source
 *.log
 docs
 README.md
-scripts
+# scripts/ is now bundled — needed to run `node scripts/migrate.js`
+# inside the container after a deploy, instead of reaching for psql
+# from the host.

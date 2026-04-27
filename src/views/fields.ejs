@@ -1,0 +1,103 @@
+<%- include('_head') %>
+  <h1>Custom fields</h1>
+  <p class="meta">
+    Each field defined here becomes editable on every coin's detail page.
+    Removing a field deletes its values across the whole collection.
+  </p>
+
+  <% if (saved) { %>
+    <p class="ok-banner">Saved.</p>
+  <% } %>
+
+  <% if (defs.length === 0) { %>
+    <p class="muted">No fields defined yet — add one below to start.</p>
+  <% } else { %>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Label</th>
+          <th>Key</th>
+          <th>Type</th>
+          <th>Filled</th>
+          <th>Missing</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% defs.forEach(d => { %>
+          <tr>
+            <td>
+              <strong><%= d.label %></strong>
+              <% if (d.unit) { %><span class="muted">(<%= d.unit %>)</span><% } %>
+              <% if (d.hint) { %><div class="muted hint"><%= d.hint %></div><% } %>
+            </td>
+            <td><code><%= d.key %></code></td>
+            <td><%= d.type %></td>
+            <td class="num"><%= d.filled_count %></td>
+            <td class="num"><%= d.missing_count %></td>
+            <td class="actions">
+              <form action="/fields/<%= d.id %>/delete" method="post" style="display:inline" onsubmit="return confirm('Delete \'<%= d.label %>\' and all its values across the collection?')">
+                <button type="submit" class="danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+
+  <h2>Add a field</h2>
+  <form action="/fields" method="post" class="add-field-form">
+    <div class="row">
+      <label>
+        <span>Label *</span>
+        <input type="text" name="label" required placeholder="e.g. Metal" />
+      </label>
+      <label>
+        <span>Key *</span>
+        <input type="text" name="key" required pattern="[a-z0-9_]+" placeholder="e.g. metal" />
+      </label>
+    </div>
+    <div class="row">
+      <label>
+        <span>Type</span>
+        <select name="type">
+          <option value="TEXT">Text</option>
+          <option value="NUMBER">Number</option>
+          <option value="DATE">Date</option>
+        </select>
+      </label>
+      <label>
+        <span>Unit (optional)</span>
+        <input type="text" name="unit" placeholder="g, USD, oz…" />
+      </label>
+    </div>
+    <label>
+      <span>Hint (placeholder text)</span>
+      <input type="text" name="hint" placeholder="optional helper for the input" />
+    </label>
+    <div class="row">
+      <button type="submit">Add field</button>
+      <a href="/" class="muted-link">cancel</a>
+    </div>
+  </form>
+
+  <style>
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin: 10px 0 28px; background: var(--panel); border-radius: 8px; overflow: hidden; }
+    table.data th, table.data td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    table.data th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; background: var(--bg); }
+    table.data td.num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+    table.data td.actions { text-align: right; white-space: nowrap; }
+    table.data .hint { font-size: 0.78rem; margin-top: 2px; }
+    table.data button.danger { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.82rem; }
+    .ok-banner { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); color: #86efac; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+    .add-field-form { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; max-width: 640px; display: flex; flex-direction: column; gap: 12px; }
+    .add-field-form label { display: flex; flex-direction: column; }
+    .add-field-form label > span { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+    .add-field-form input, .add-field-form select { padding: 10px 12px; min-height: 44px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; }
+    .add-field-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 480px) { .add-field-form .row { grid-template-columns: 1fr; } }
+    .add-field-form button { padding: 12px 22px; background: var(--accent); color: var(--bg); border: 0; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.95rem; }
+    .muted-link { color: var(--muted); font-size: 0.85rem; align-self: center; }
+  </style>
+<%- include('_foot') %>

@@ -96,7 +96,45 @@ CREATE TABLE IF NOT EXISTS coin_purchases (
 
 CREATE INDEX IF NOT EXISTS coin_purchases_coin_idx ON coin_purchases(coin_id);
 CREATE INDEX IF NOT EXISTS coin_purchases_date_idx ON coin_purchases(purchase_date);
+
+-- Custom fields registry. coin_attribute_defs is the operator-defined
+-- list of attributes ("Metal", "Weight (g)", "Current spot value"…);
+-- coin_attributes holds the per-coin value for each definition.
+-- Splitting them this way means adding a new field is a single INSERT
+-- on the defs table — no schema change, no UI redeploy. Values stay
+-- TEXT for storage simplicity; the def type column lets the UI pick
+-- the right input + format (NUMBER → numeric input, DATE → date picker).
+CREATE TABLE IF NOT EXISTS coin_attribute_defs (
+  id          SERIAL PRIMARY KEY,
+  key         TEXT NOT NULL UNIQUE,
+  label       TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'TEXT',  -- TEXT | NUMBER | DATE
+  unit        TEXT,
+  hint        TEXT,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS coin_attributes (
+  id          SERIAL PRIMARY KEY,
+  coin_id     INTEGER NOT NULL REFERENCES coins(id) ON DELETE CASCADE,
+  def_id      INTEGER NOT NULL REFERENCES coin_attribute_defs(id) ON DELETE CASCADE,
+  value       TEXT,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (coin_id, def_id)
+);
+CREATE INDEX IF NOT EXISTS coin_attributes_coin_idx ON coin_attributes(coin_id);
 `;
+
+// Seed common attribute definitions so the UI has examples on first
+// boot. Idempotent — ON CONFLICT (key) DO NOTHING preserves any custom
+// labels/units the operator has already set.
+const SEED_ATTRIBUTE_DEFS = [
+  ['metal',          'Metal',                'TEXT',   null,  'e.g. Silver, Copper, Cu-Ni',   10],
+  ['metal_purity',   'Metal purity',         'TEXT',   null,  'e.g. .900, .999',              20],
+  ['weight_grams',   'Weight',               'NUMBER', 'g',   'in grams',                     30],
+  ['metal_value',    'Melt value (estimate)', 'NUMBER', 'USD', 'current melt value',           40],
+];
 
 const SEED_TYPES = [
   ['Penny', 1],
@@ -232,6 +270,16 @@ async function main() {
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (name) DO NOTHING`,
         [rows[0].id, seriesName, startYear, endYear],
+      );
+    }
+
+    console.log('Seeding default attribute definitions…');
+    for (const [key, label, type, unit, hint, sortOrder] of SEED_ATTRIBUTE_DEFS) {
+      await client.query(
+        `INSERT INTO coin_attribute_defs (key, label, type, unit, hint, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (key) DO NOTHING`,
+        [key, label, type, unit, hint, sortOrder],
       );
     }
 
