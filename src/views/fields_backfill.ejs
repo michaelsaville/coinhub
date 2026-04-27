@@ -1,0 +1,107 @@
+<%- include('_head') %>
+  <p><a href="/fields">← Back to fields</a></p>
+  <h1>AI fill: <%= def.label %></h1>
+  <p class="meta">
+    <code><%= def.key %></code> ·
+    type <%= def.type %><% if (def.unit) { %> · unit <%= def.unit %><% } %>
+  </p>
+
+  <% if (error) { %>
+    <p class="error-banner"><%= error %></p>
+  <% } %>
+
+  <% if (suggestions === null) { %>
+    <% if (missing.length === 0) { %>
+      <p class="ok-banner">Every coin already has a value for this field.</p>
+    <% } else { %>
+      <p>
+        <strong><%= missing.length.toLocaleString() %></strong> coins are missing a value for
+        <strong><%= def.label %></strong>.
+        Generate AI suggestions for the next batch — you'll review and accept/reject each one before anything is saved.
+      </p>
+      <form action="/fields/<%= def.id %>/ai-suggest" method="post" class="batch-form">
+        <label>
+          Batch size:
+          <input type="number" name="batch_size" min="1" max="25" value="10" />
+        </label>
+        <button type="submit">✨ Suggest values</button>
+      </form>
+    <% } %>
+  <% } else { %>
+    <p>
+      AI suggestions for <%= suggestions.length %> coins.
+      Boxes are pre-checked when confidence ≥ 0.7. Edit values inline if needed.
+    </p>
+
+    <form action="/fields/<%= def.id %>/ai-apply" method="post">
+      <table class="data">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all" checked /></th>
+            <th>Coin</th>
+            <th>Suggested value</th>
+            <th>Confidence</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% suggestions.forEach(s => {
+               const conf = s.confidence ?? 0;
+               const confColor = conf >= 0.8 ? '#86efac' : conf >= 0.5 ? '#fbbf24' : '#f87171';
+               const isChecked = conf >= 0.7 && s.value;
+          %>
+            <tr>
+              <td><input type="checkbox" name="accept_<%= s.coin.id %>" <%= isChecked ? 'checked' : '' %> class="accept-cb" /></td>
+              <td>
+                <a href="/coins/<%= s.coin.id %>" target="_blank">
+                  <%= s.coin.year ?? '—' %> <%= s.coin.series ?? '—' %> <%= s.coin.mint ?? '' %>
+                </a>
+                <div class="muted serial"><%= s.coin.serial %></div>
+              </td>
+              <td>
+                <input type="text" name="value_<%= s.coin.id %>" value="<%= s.value %>"
+                       <%= def.type === 'NUMBER' ? 'inputmode="decimal"' : '' %> />
+              </td>
+              <td class="num">
+                <% if (s.confidence !== null) { %>
+                  <span style="color: <%= confColor %>; font-weight: 700;"><%= s.confidence.toFixed(2) %></span>
+                <% } else { %>—<% } %>
+              </td>
+              <td class="muted reason"><%= s.reason ?? '' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <div class="apply-actions">
+        <button type="submit">Apply checked</button>
+        <a href="/fields/<%= def.id %>/backfill" class="muted-link">Generate another batch</a>
+      </div>
+    </form>
+
+    <script>
+      // Select-all toggle
+      document.getElementById('select-all').addEventListener('change', (e) => {
+        document.querySelectorAll('.accept-cb').forEach((cb) => { cb.checked = e.target.checked; });
+      });
+    </script>
+  <% } %>
+
+  <style>
+    .batch-form { display: flex; gap: 12px; align-items: end; margin: 16px 0 24px; padding: 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+    .batch-form label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+    .batch-form input { padding: 8px 10px; min-height: 40px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; width: 80px; }
+    .batch-form button { padding: 12px 22px; background: var(--accent); color: var(--bg); border: 0; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.95rem; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin: 10px 0 16px; background: var(--panel); border-radius: 8px; overflow: hidden; }
+    table.data th, table.data td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    table.data th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; background: var(--bg); }
+    table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
+    table.data .serial { font-family: monospace; font-size: 0.78rem; margin-top: 2px; }
+    table.data .reason { font-size: 0.82rem; max-width: 240px; }
+    table.data input[type=text] { width: 100%; padding: 6px 8px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; }
+    .apply-actions { display: flex; gap: 14px; align-items: center; margin: 12px 0 24px; }
+    .apply-actions button { padding: 12px 22px; background: var(--accent); color: var(--bg); border: 0; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.95rem; }
+    .muted-link { color: var(--muted); font-size: 0.85rem; }
+    .ok-banner { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); color: #86efac; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+    .error-banner { background: rgba(220,38,38,0.15); border: 1px solid rgba(220,38,38,0.4); color: #fca5a5; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+  </style>
+<%- include('_foot') %>

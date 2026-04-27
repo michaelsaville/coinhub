@@ -25,6 +25,11 @@ services:
       DATABASE_URL: postgres://coinhub:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@db:5432/coinhub
       COINHUB_USER: ${COINHUB_USER:-michael}
       COINHUB_PASSWORD: ${COINHUB_PASSWORD:?COINHUB_PASSWORD must be set in .env}
+      # AI proxy (sister-app pattern): the token must match DocHub's
+      # AI_PROXY_TOKEN. Optional — when missing, the AI fill button
+      # surfaces a friendly error instead of a 500.
+      AI_PROXY_URL: ${AI_PROXY_URL:-https://dochub.pcc2k.com/api/ai/proxy}
+      AI_PROXY_TOKEN: ${AI_PROXY_TOKEN:-}
       NODE_ENV: production
       PORT: 3000
     depends_on:

@@ -383,6 +383,201 @@ app.post('/fields/:id/delete', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ─── AI backfill (slice 2) ──────────────────────────────────────────
+//
+// /fields/:id/backfill is the review queue. The "Suggest" button
+// pulls a batch of N coins missing the field and asks Claude (via
+// the DocHub proxy) for a value per coin. Suggestions are returned
+// inline; the user accepts/rejects/edits per row, then bulk-saves.
+//
+// Suggestions are never auto-applied — every value lands in the DB
+// only after explicit human approval.
+
+app.get('/fields/:id(\\d+)/backfill', async (req, res, next) => {
+  const id = parseInt(req.params.id, 10);
+  try {
+    const [{ rows: defRows }, { rows: missing }] = await Promise.all([
+      pool.query('SELECT * FROM coin_attribute_defs WHERE id = $1', [id]),
+      pool.query(`
+        SELECT c.id, c.year, c.serial,
+               s.name AS series, t.name AS type, t.denomination_cents,
+               m.code AS mint, cond.grade
+        FROM coins c
+        LEFT JOIN coin_series s ON s.id = c.series_id
+        LEFT JOIN coin_types t ON t.id = s.type_id
+        LEFT JOIN mints m ON m.id = c.mint_id
+        LEFT JOIN conditions cond ON cond.id = c.condition_id
+        WHERE NOT EXISTS (
+          SELECT 1 FROM coin_attributes a
+          WHERE a.coin_id = c.id AND a.def_id = $1
+                AND a.value IS NOT NULL AND a.value != ''
+        )
+        ORDER BY s.name NULLS LAST, c.year, c.id
+        LIMIT 500
+      `, [id]),
+    ]);
+    if (!defRows[0]) return res.sendStatus(404);
+    res.render('fields_backfill', {
+      title: `AI fill — ${defRows[0].label}`,
+      def: defRows[0],
+      missing,
+      suggestions: null,
+      error: null,
+    });
+  } catch (e) { next(e); }
+});
+
+import('./ai/client.js').then((m) => {
+  globalThis.__coinhubAi = m;
+}); // eager-load so the first request isn't slow
+
+app.post('/fields/:id(\\d+)/ai-suggest', async (req, res, next) => {
+  const id = parseInt(req.params.id, 10);
+  const batchSize = Math.min(25, Math.max(1, parseInt(req.body.batch_size || '10', 10)));
+  try {
+    const ai = globalThis.__coinhubAi || (await import('./ai/client.js'));
+    const { rows: defRows } = await pool.query('SELECT * FROM coin_attribute_defs WHERE id = $1', [id]);
+    const def = defRows[0];
+    if (!def) return res.sendStatus(404);
+
+    const { rows: coins } = await pool.query(`
+      SELECT c.id, c.year, c.serial,
+             s.name AS series, t.name AS type, t.denomination_cents,
+             m.code AS mint, cond.grade
+      FROM coins c
+      LEFT JOIN coin_series s ON s.id = c.series_id
+      LEFT JOIN coin_types t ON t.id = s.type_id
+      LEFT JOIN mints m ON m.id = c.mint_id
+      LEFT JOIN conditions cond ON cond.id = c.condition_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM coin_attributes a
+        WHERE a.coin_id = c.id AND a.def_id = $1
+              AND a.value IS NOT NULL AND a.value != ''
+      )
+      ORDER BY s.name NULLS LAST, c.year, c.id
+      LIMIT $2
+    `, [id, batchSize]);
+
+    if (coins.length === 0) {
+      return res.render('fields_backfill', {
+        title: `AI fill — ${def.label}`,
+        def, missing: [], suggestions: [],
+        error: 'Every coin already has a value for this field. Nothing to suggest.',
+      });
+    }
+
+    const system = [
+      `You are a numismatic expert filling a custom data field for a coin collector.`,
+      `Field: "${def.label}" (key: ${def.key}, type: ${def.type}${def.unit ? ', unit: ' + def.unit : ''}).`,
+      def.hint ? `Hint to the user: "${def.hint}".` : '',
+      ``,
+      `For each coin in the user message, suggest a value for this field based on standard numismatic knowledge.`,
+      `Use composition tables (e.g. Lincoln Cent: 95% Cu pre-1982, then 97.5% Zn / 2.5% Cu plating; Morgan Dollar: 90% Ag).`,
+      `For melt-value-style fields, use a recent silver spot (~$30/oz) or copper spot (~$0.40/oz) as a rough estimate.`,
+      ``,
+      `Respond with ONLY a JSON array, one object per coin, in the SAME ORDER as the input:`,
+      `  [{"coin_id": <id>, "value": "<suggested value, or null if you're not sure>", "confidence": 0.0-1.0, "reason": "<one short phrase>"}]`,
+      ``,
+      `confidence interpretation:`,
+      `  >= 0.8  : standard reference data, e.g. Morgan Dollar = 90% silver`,
+      `  0.5–0.8 : type known but variant uncertain (e.g. Lincoln 1982 transition year)`,
+      `  < 0.5   : guessing — return null value`,
+    ].filter(Boolean).join('\n');
+
+    const userPayload = coins.map((c) => ({
+      coin_id: c.id,
+      year: c.year,
+      series: c.series,
+      type: c.type,
+      mint: c.mint,
+      condition: c.grade,
+      serial: c.serial,
+    }));
+
+    const result = await ai.callProxy(
+      [{ role: 'user', content: JSON.stringify(userPayload, null, 2) }],
+      { system, max_tokens: 4096 },
+    );
+
+    if (!result.ok) {
+      return res.render('fields_backfill', {
+        title: `AI fill — ${def.label}`,
+        def, missing: coins, suggestions: null,
+        error: `AI proxy error: ${result.error}`,
+      });
+    }
+    const parsed = ai.extractJson(result.response);
+    if (!Array.isArray(parsed)) {
+      return res.render('fields_backfill', {
+        title: `AI fill — ${def.label}`,
+        def, missing: coins, suggestions: null,
+        error: `Could not parse AI response as JSON. Raw text was: ${
+          result.response?.content?.[0]?.text?.slice(0, 200) || '(empty)'
+        }`,
+      });
+    }
+
+    // Stitch suggestions back to the coin rows so the UI has full
+    // context per row. AI might return them out of order or skip ids;
+    // be defensive.
+    const byId = new Map(parsed.map((s) => [s.coin_id, s]));
+    const suggestions = coins.map((c) => {
+      const s = byId.get(c.id) || {};
+      return {
+        coin: c,
+        value: s.value ?? '',
+        confidence: typeof s.confidence === 'number' ? s.confidence : null,
+        reason: s.reason ?? '',
+      };
+    });
+
+    res.render('fields_backfill', {
+      title: `AI fill — ${def.label}`,
+      def, missing: [], suggestions,
+      error: null,
+    });
+  } catch (e) { next(e); }
+});
+
+app.post('/fields/:id(\\d+)/ai-apply', async (req, res, next) => {
+  const id = parseInt(req.params.id, 10);
+  try {
+    // Form fields look like accept_<coinId>=on + value_<coinId>=<value>
+    const accepted = [];
+    for (const [k, v] of Object.entries(req.body)) {
+      if (!k.startsWith('accept_')) continue;
+      const coinId = parseInt(k.slice(7), 10);
+      if (!Number.isInteger(coinId)) continue;
+      const val = (req.body[`value_${coinId}`] || '').toString().trim();
+      if (!val) continue;
+      accepted.push([coinId, val]);
+    }
+    if (accepted.length === 0) {
+      return res.redirect(`/fields/${id}/backfill`);
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const [coinId, val] of accepted) {
+        await client.query(
+          `INSERT INTO coin_attributes (coin_id, def_id, value, updated_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (coin_id, def_id)
+           DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+          [coinId, id, val],
+        );
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
+    res.redirect(`/fields/${id}/backfill?applied=${accepted.length}`);
+  } catch (e) { next(e); }
+});
+
 // Bulk-update all custom-field values for a single coin. Posted from
 // the coin detail page's edit form. Empty value → DELETE the row
 // (revert to "no value set"), so blanking the input clears it.

@@ -36,6 +36,9 @@
             <td class="num"><%= d.filled_count %></td>
             <td class="num"><%= d.missing_count %></td>
             <td class="actions">
+              <% if (d.missing_count > 0) { %>
+                <a href="/fields/<%= d.id %>/backfill" class="ai-btn">✨ AI fill (<%= d.missing_count %>)</a>
+              <% } %>
               <form action="/fields/<%= d.id %>/delete" method="post" style="display:inline" onsubmit="return confirm('Delete \'<%= d.label %>\' and all its values across the collection?')">
                 <button type="submit" class="danger">Delete</button>
               </form>
@@ -90,6 +93,8 @@
     table.data td.actions { text-align: right; white-space: nowrap; }
     table.data .hint { font-size: 0.78rem; margin-top: 2px; }
     table.data button.danger { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.82rem; }
+    table.data .ai-btn { display: inline-block; background: rgba(251,191,36,0.15); color: var(--accent); border: 1px solid rgba(251,191,36,0.4); padding: 6px 10px; border-radius: 6px; font-size: 0.82rem; margin-right: 6px; text-decoration: none; }
+    table.data .ai-btn:hover { background: rgba(251,191,36,0.25); }
     .ok-banner { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); color: #86efac; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
     .add-field-form { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; max-width: 640px; display: flex; flex-direction: column; gap: 12px; }
     .add-field-form label { display: flex; flex-direction: column; }
