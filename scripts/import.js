@@ -4,6 +4,21 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import 'dotenv/config';
+import {
+  MINT_MAP,
+  CONDITION_MAP,
+  SERIES_MAP,
+  SERIES_PREFIX_MAP,
+  SERIES_KEYWORDS,
+  SERIAL_PREFIX_TO_SERIES,
+  FOREIGN_KEYWORDS,
+  tryDirectGrade,
+  normalizeMint,
+  normalizeCondition,
+  normalizeSeries,
+  detectCountry,
+  normalizeYear,
+} from '../src/import/normalizers.js';
 
 const { Client } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -16,267 +31,9 @@ const APPLY = args.has('--apply');
 const DRY_RUN = args.has('--dry-run') || !APPLY;
 
 // ────────────────────────────────────────────────────────────────────────
-// Normalization tables — EDIT HERE after reviewing the dry-run report.
+// Normalization tables live in src/import/normalizers.js — edit there
+// to keep the CLI script and the web wizard in sync.
 // ────────────────────────────────────────────────────────────────────────
-
-const MINT_MAP = {
-  '': 'P',
-  ' ': 'P',
-  'p': 'P',
-  'P': 'P',
-  'd': 'D',
-  'D': 'D',
-  's': 'S',
-  'S': 'S',
-  'w': 'W',
-  'W': 'W',
-  'cc': 'CC',
-  'CC': 'CC',
-  'o': 'O',
-  'O': 'O',
-  // Special markers in source — not real mint marks
-  'VDB': 'P',     // 1909 VDB designer initial, Philadelphia
-  'SET': 'P',     // marks a multi-coin product; canonical anchor = P
-  'D & P': 'P',   // mint set containing both; anchor = P
-  '9': 'P',       // likely a data-entry slip
-};
-
-// Freeform → canonical grade.  Unknown values fall through to 'UNG' and are
-// listed in the report so you can add mappings here before --apply.
-const CONDITION_MAP = {
-  'poor': 'PO-1',
-  'fair': 'FR-2',
-  'about good': 'AG-3',
-  'ag': 'AG-3',
-  'good': 'G-4',
-  'g': 'G-4',
-  'very good': 'VG-8',
-  'vg': 'VG-8',
-  'fine': 'F-12',
-  'f': 'F-12',
-  'very fine': 'VF-20',
-  'vf': 'VF-20',
-  'extremely fine': 'XF-40',
-  'extra fine': 'XF-40',
-  'xf': 'XF-40',
-  'ef': 'XF-40',
-  'about uncirculated': 'AU-50',
-  'au': 'AU-50',
-  'uncirculated': 'MS-60',
-  'unciculated': 'MS-60', // typo seen in source
-  'unc': 'MS-60',
-  'mint state': 'MS-63',
-  'ms': 'MS-63',
-  'select uncirculated': 'MS-63',
-  'choice uncirculated': 'MS-64',
-  'gem uncirculated': 'MS-65',
-  'gem': 'MS-65',
-  'superb gem': 'MS-67',
-  'brilliant uncirculated': 'MS-63',
-  'brilliant unciculated': 'MS-63', // typo seen in source
-  'bu': 'MS-63',
-  'proof': 'PR-65',
-  'pr': 'PR-65',
-  'pf': 'PR-65',
-  'ungraded': 'UNG',
-  '': 'UNG',
-};
-
-// Maps sheldon grades that appear inline (e.g. 'MS-63', 'AU-55', 'F-12 Fine')
-// straight through — accepts trailing descriptive text.
-function tryDirectGrade(value) {
-  const raw = String(value).trim().toUpperCase();
-  const m = raw.match(/^(MS|AU|XF|EF|VF|F|VG|G|AG|FR|PO|PR|PF)-?(\d{1,2})\b/);
-  if (!m) return null;
-  const prefix = m[1].replace(/^EF$/, 'XF').replace(/^PF$/, 'PR');
-  return `${prefix}-${m[2]}`;
-}
-
-// Series mapping: DESC (lowercased, trimmed) → canonical series name.
-// Covers typos ('murcury dime', 'morgan doller', 'washinton', etc.) seen in source.
-// All Lincoln varieties (Wheat 1909-58, Steel 1943, Memorial 1959-2008,
-// Bicentennial/Shield 2010-) are the same base "Lincoln Cent" series;
-// the year picks the design out.  Proof variants collapse too since
-// the Condition field already carries Proof.
-const SERIES_MAP = {
-  'indian head penny': 'Indian Head Penny',
-  'indian head cent': 'Indian Head Penny',
-  'lincoln cent': 'Lincoln Cent',
-  'lincoln penny': 'Lincoln Cent',
-  'lincoln wheat cent': 'Lincoln Cent',
-  'lincoln memorial cent': 'Lincoln Cent',
-  'wheat penny': 'Lincoln Cent',
-  'memorial penny': 'Lincoln Cent',
-  'memorial penny proof': 'Lincoln Cent',
-  'shield penny': 'Lincoln Cent',
-  'shield penny proof': 'Lincoln Cent',
-  'shield penny roll': 'Lincoln Cent',
-  'steel penny': 'Lincoln Cent',
-  'bicentennial penny': 'Lincoln Cent',
-  'jefferson nickel proof': 'Jefferson Nickel',
-  'kennedy half dollar proof': 'Kennedy Half',
-  'morgan dollar proof': 'Morgan Dollar',
-  'peace dollar proof': 'Peace Dollar',
-  'american eagle unc': 'Silver Eagle Dollar',
-  'american eagle proof': 'Silver Eagle Dollar',
-  'standing liberty half': 'Walking Liberty Half', // mislabel in source — no "standing liberty half" exists
-  'susan b anthony': 'Susan B. Anthony Dollar',
-  'susan b anthony souvenir set': 'Susan B. Anthony Dollar',
-  // 2004–2005 Westward Journey Jefferson Nickel variants collapse to base series.
-  'jefferson nickel peace medal': 'Jefferson Nickel',
-  'jefferson nickel peace medal proof': 'Jefferson Nickel',
-  'jefferson nickel keelboat': 'Jefferson Nickel',
-  'jefferson nickel keelboat proof': 'Jefferson Nickel',
-  'jefferson nickel bison proof': 'Jefferson Nickel',
-  'jefferson nickel roll ocean in view': 'Jefferson Nickel',
-  // Presidential Dollar: one series, president name is captured in comment/year.
-  'presidential dollar george washington': 'Presidential Dollar',
-  'presidential dollar john tyler': 'Presidential Dollar',
-  'presidential dollar james garfield': 'Presidential Dollar',
-  'presidential dollar ulysses s. grant': 'Presidential Dollar',
-  // Eisenhower variety → base.
-  'eisenhower dollar variety i*': 'Eisenhower Dollar',
-  'flying eagle cent': 'Flying Eagle Cent',
-  'flying eagle': 'Flying Eagle Cent',
-  'liberty v nickel': 'Liberty V Nickel',
-  'liberty nickel': 'Liberty V Nickel',
-  'v nickel': 'Liberty V Nickel',
-  'buffalo nickel': 'Buffalo Nickel',
-  'jefferson nickel': 'Jefferson Nickel',
-  'shield nickel': 'Shield Nickel',
-  'mercury dime': 'Mercury Dime',
-  'murcury dime': 'Mercury Dime', // typo
-  'roosevelt dime': 'Roosevelt Dime',
-  'barber dime': 'Barber Dime',
-  'washington quarter': 'Washington Quarter',
-  'washinton quarter': 'Washington Quarter', // typo
-  'barber quarter': 'Barber Quarter',
-  'standing liberty quarter': 'Standing Liberty Quarter',
-  'walking liberty half': 'Walking Liberty Half',
-  'walking liberty half dollar': 'Walking Liberty Half',
-  'franklin half': 'Franklin Half',
-  'franklin half dollar': 'Franklin Half',
-  'kennedy half': 'Kennedy Half',
-  'kennedy half dollar': 'Kennedy Half',
-  'liberty halp dollar': 'Walking Liberty Half', // typo
-  'barber half': 'Barber Half',
-  'morgan dollar': 'Morgan Dollar',
-  'morgan doller': 'Morgan Dollar', // typo
-  'peace dollar': 'Peace Dollar',
-  'eisenhower dollar': 'Eisenhower Dollar',
-  'ike dollar': 'Eisenhower Dollar',
-  'susan b. anthony dollar': 'Susan B. Anthony Dollar',
-  'susan b anthony dollar': 'Susan B. Anthony Dollar',
-  'sba dollar': 'Susan B. Anthony Dollar',
-  'sacagawea dollar': 'Sacagawea Dollar',
-  'presidential dollar': 'Presidential Dollar',
-  'silver eagle dollar': 'Silver Eagle Dollar',
-  'silver eagle': 'Silver Eagle Dollar',
-  'eagle dollar': 'Silver Eagle Dollar',
-  'american eagle': 'Silver Eagle Dollar',
-  'trade dollar': 'Trade Dollar',
-  'seated liberty dollar': 'Seated Liberty Dollar',
-};
-
-// Fallback prefix match (checked only if SERIES_MAP misses) — lets us collapse
-// "Presidential Dollar <anything>" style variants without enumerating every name.
-const SERIES_PREFIX_MAP = [
-  ['presidential dollar ', 'Presidential Dollar'],
-  ['jefferson nickel ', 'Jefferson Nickel'],
-  ['kennedy half dollar', 'Kennedy Half'],
-];
-
-// Keyword-based series detection for commemoratives, mint sets, and bulk lots.
-// Order matters — first hit wins.
-const SERIES_KEYWORDS = [
-  [/mint set|proof set|uncirculated set|over the years set|collector set|president set|state quarter set/i, 'Mint Set'],
-  [/tube|roll\b|penney book|quarters book/i, 'Bulk Lot'],
-  [/commem|constitution|uso silver|mt rushmore|stormin|desert storm|heros of|liberty silver dollar|first day cover/i, 'Commemorative'],
-];
-
-// When DESC is missing/blank, fall back to the Serial prefix.
-const SERIAL_PREFIX_TO_SERIES = {
-  'IND': 'Indian Head Penny',
-  'WHT': 'Lincoln Cent',
-  'SLD': 'Lincoln Cent',
-  'MEM': 'Lincoln Cent',
-  'LIB': 'Liberty V Nickel',
-  'BUF': 'Buffalo Nickel',
-  'JEF': 'Jefferson Nickel',
-  'MRC': 'Mercury Dime',
-  'ROO': 'Roosevelt Dime',
-  'WAS': 'Washington Quarter',
-  'WAL': 'Walking Liberty Half',
-  'FRA': 'Franklin Half',
-  'KEN': 'Kennedy Half',
-  'MOR': 'Morgan Dollar',
-  'PEA': 'Peace Dollar',
-  'EIS': 'Eisenhower Dollar',
-  'SBA': 'Susan B. Anthony Dollar',
-  'SAC': 'Sacagawea Dollar',
-  'PRE': 'Presidential Dollar',
-  'AEU': 'Silver Eagle Dollar',
-};
-
-// Foreign country detection — DESC keyword → ISO country code.
-const FOREIGN_KEYWORDS = [
-  [/canad/i, 'CA'],
-  [/marshaa?l/i, 'MH'], // covers 'Marshall' and the 'Marshaal' typo in source
-  [/korea/i, 'KR'],
-  [/mexic/i, 'MX'],
-  [/british|great britain|uk\b/i, 'GB'],
-  [/olympic/i, 'XX'], // placeholder — many nations; flag for review
-];
-
-// ────────────────────────────────────────────────────────────────────────
-
-function normalizeMint(raw) {
-  if (raw === null || raw === undefined) return 'P';
-  const key = String(raw).trim();
-  if (MINT_MAP[key] !== undefined) return MINT_MAP[key];
-  return null; // unknown → flag
-}
-
-function normalizeCondition(raw) {
-  if (raw === null || raw === undefined) return 'UNG';
-  const direct = tryDirectGrade(raw);
-  if (direct) return direct;
-  const key = String(raw).trim().toLowerCase();
-  if (CONDITION_MAP[key] !== undefined) return CONDITION_MAP[key];
-  return null;
-}
-
-function normalizeSeries(desc, serial) {
-  const key = desc ? String(desc).trim().toLowerCase().replace(/\s+/g, ' ') : '';
-  if (key) {
-    if (SERIES_MAP[key]) return SERIES_MAP[key];
-    for (const [prefix, series] of SERIES_PREFIX_MAP) {
-      if (key.startsWith(prefix)) return series;
-    }
-    for (const [re, series] of SERIES_KEYWORDS) {
-      if (re.test(key)) return series;
-    }
-  }
-  // Fall back to the Serial prefix (e.g. PRE2011DOL-AA → Presidential Dollar).
-  if (serial) {
-    const m = String(serial).match(/^([A-Z]{3})/);
-    if (m && SERIAL_PREFIX_TO_SERIES[m[1]]) return SERIAL_PREFIX_TO_SERIES[m[1]];
-  }
-  return null;
-}
-
-function detectCountry(desc) {
-  if (!desc) return 'US';
-  for (const [re, code] of FOREIGN_KEYWORDS) if (re.test(desc)) return code;
-  return 'US';
-}
-
-function normalizeYear(raw) {
-  if (raw === null || raw === undefined) return null;
-  const n = typeof raw === 'number' ? raw : parseInt(String(raw).trim(), 10);
-  if (Number.isFinite(n) && n >= 1700 && n <= 2100) return n;
-  return null;
-}
 
 function detectPhotoFilename(row) {
   // __EMPTY_9 sometimes holds the old UNC path prefix '\\coins1\\PHOTOS\\';

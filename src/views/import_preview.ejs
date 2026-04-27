@@ -1,0 +1,150 @@
+<%- include('_head') %>
+  <div class="wizard-steps">
+    <span>1. Upload</span>
+    <span>2. Map columns</span>
+    <span class="active">3. Preview</span>
+    <span>4. Done</span>
+  </div>
+
+  <h1>Preview</h1>
+  <p class="meta"><code><%= filename %></code> · <%= rowCount.toLocaleString() %> rows analyzed</p>
+
+  <section class="summary-grid">
+    <div class="card">
+      <div class="label">New coins</div>
+      <div class="value ok"><%= counts.fresh.toLocaleString() %></div>
+    </div>
+    <div class="card">
+      <div class="label">Duplicates (decide below)</div>
+      <div class="value warn"><%= counts.dupes.toLocaleString() %></div>
+    </div>
+    <div class="card">
+      <div class="label">Invalid (skipped)</div>
+      <div class="value <%= counts.invalid > 0 ? 'bad' : '' %>"><%= counts.invalid.toLocaleString() %></div>
+    </div>
+  </section>
+
+  <form action="/import/<%= sid %>/commit" method="post">
+    <% if (counts.dupes > 0) { %>
+      <h2>Duplicates — what should we do?</h2>
+      <p class="fine">
+        These rows have a serial that already exists in the collection.
+        Pick a default below, or override per row.
+      </p>
+
+      <p class="filter-row" style="gap: 14px;">
+        <label class="chip">
+          <input type="radio" name="default_resolution" value="skip" checked />
+          Skip all
+        </label>
+        <label class="chip">
+          <input type="radio" name="default_resolution" value="purchase" />
+          Add as new purchase
+        </label>
+        <label class="chip">
+          <input type="radio" name="default_resolution" value="overwrite" />
+          Overwrite + add purchase
+        </label>
+      </p>
+      <p class="fine">
+        <strong>Skip</strong> = re-entry of a coin already in the system.
+        <strong>Add as new purchase</strong> = same coin bought again, keeps history of both purchases.
+        <strong>Overwrite</strong> = correct the existing row's data and log the new purchase.
+      </p>
+
+      <table class="preview">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Serial</th>
+            <th>Year</th>
+            <th>Mint</th>
+            <th>Series</th>
+            <th>Paid</th>
+            <th>Override</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% dupes.forEach(p => { %>
+            <tr class="dupe-row">
+              <td class="muted"><%= p.sheetRow %></td>
+              <td class="serial"><%= p.normalized.serial %></td>
+              <td><%= p.normalized.year ?? '' %></td>
+              <td><%= p.normalized.mint ?? '' %></td>
+              <td class="muted"><%= p.normalized.series ?? p.normalized.desc ?? '' %></td>
+              <td><%= p.normalized.paid != null ? '$' + Number(p.normalized.paid).toFixed(2) : '' %></td>
+              <td class="choice">
+                <label><input type="radio" name="dupe[<%= p.idx %>]" value="" checked /> default</label>
+                <label><input type="radio" name="dupe[<%= p.idx %>]" value="skip" /> skip</label>
+                <label><input type="radio" name="dupe[<%= p.idx %>]" value="purchase" /> +purchase</label>
+                <label><input type="radio" name="dupe[<%= p.idx %>]" value="overwrite" /> overwrite</label>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p class="fine">No duplicates — every row will be a fresh insert.</p>
+      <input type="hidden" name="default_resolution" value="skip" />
+    <% } %>
+
+    <% if (counts.fresh > 0) { %>
+      <h2>New coins (first <%= Math.min(fresh.length, 20) %> of <%= counts.fresh %>)</h2>
+      <table class="preview">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Serial</th>
+            <th>Year</th>
+            <th>Mint</th>
+            <th>Series</th>
+            <th>Paid</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% fresh.forEach(p => { %>
+            <tr>
+              <td class="muted"><%= p.sheetRow %></td>
+              <td class="serial"><%= p.normalized.serial %></td>
+              <td><%= p.normalized.year ?? '' %></td>
+              <td><%= p.normalized.mint ?? '' %></td>
+              <td class="muted"><%= p.normalized.series ?? p.normalized.desc ?? '' %></td>
+              <td><%= p.normalized.paid != null ? '$' + Number(p.normalized.paid).toFixed(2) : '' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+
+    <% if (counts.invalid > 0) { %>
+      <h2>Invalid rows (will be skipped)</h2>
+      <p class="fine">Showing the first <%= Math.min(invalid.length, 30) %> of <%= counts.invalid %>. These rows have problems we can't auto-resolve — fix the source and re-upload to import them.</p>
+      <table class="preview">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Serial</th>
+            <th>Issues</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% invalid.forEach(p => { %>
+            <tr>
+              <td class="muted"><%= p.sheetRow %></td>
+              <td class="serial"><%= p.normalized.serial ?? '—' %></td>
+              <td class="muted"><%= p.issues.join('; ') %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+
+    <div class="btn-row">
+      <button type="submit" class="btn">Apply import</button>
+      <a href="/import/<%= sid %>/map" class="btn btn-secondary">← Back to mapping</a>
+      <form action="/import/<%= sid %>/cancel" method="post" style="display:inline">
+        <button type="submit" class="btn btn-secondary">Cancel</button>
+      </form>
+    </div>
+  </form>
+<%- include('_foot') %>

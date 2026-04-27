@@ -3,6 +3,16 @@
   <h1><%= series.name %></h1>
   <p class="meta"><%= series.type_name %><% if (series.start_year) { %> · <%= series.start_year %>–<%= series.end_year ?? 'now' %><% } %> · <%= coins.length %> coin<%= coins.length === 1 ? '' : 's' %></p>
 
+  <% if (mintage && mintage.mintage_total > 0) { %>
+    <p class="gaps-link">
+      <a href="/series/<%= series.id %>/gaps">
+        Completion: <%= mintage.mintage_owned %>/<%= mintage.mintage_total %>
+        (<%= Math.round((mintage.mintage_owned / mintage.mintage_total) * 100) %>%)
+        — view gap grid →
+      </a>
+    </p>
+  <% } %>
+
   <ul class="results">
     <% coins.forEach(c => { %>
       <li>

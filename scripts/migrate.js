@@ -78,6 +78,24 @@ CREATE TABLE IF NOT EXISTS photos (
   is_primary  BOOLEAN DEFAULT FALSE,
   uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Per-purchase history. One row per acquisition event for a coin. The
+-- existing coins.acquired_date / coins.paid stay as the "first acquired"
+-- snapshot; coin_purchases is the source of truth for full purchase
+-- history, P&L, and re-entry vs. duplicate-purchase resolution.
+CREATE TABLE IF NOT EXISTS coin_purchases (
+  id            SERIAL PRIMARY KEY,
+  coin_id       INTEGER NOT NULL REFERENCES coins(id) ON DELETE CASCADE,
+  purchase_date DATE,
+  price         NUMERIC(10,2),
+  qty           INTEGER NOT NULL DEFAULT 1,
+  source        TEXT,
+  notes         TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS coin_purchases_coin_idx ON coin_purchases(coin_id);
+CREATE INDEX IF NOT EXISTS coin_purchases_date_idx ON coin_purchases(purchase_date);
 `;
 
 const SEED_TYPES = [
@@ -214,6 +232,24 @@ async function main() {
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (name) DO NOTHING`,
         [rows[0].id, seriesName, startYear, endYear],
+      );
+    }
+
+    // Backfill: synthesize one coin_purchases row per existing coin so all
+    // history lives in one place from now on. Only fires the first time
+    // (idempotent — looks at whether ANY coin still has zero purchase rows).
+    const { rows: needBackfill } = await client.query(
+      `SELECT COUNT(*)::int AS n FROM coins c
+       WHERE NOT EXISTS (SELECT 1 FROM coin_purchases p WHERE p.coin_id = c.id)`,
+    );
+    if (needBackfill[0]?.n > 0) {
+      console.log(`Backfilling coin_purchases for ${needBackfill[0].n} coins…`);
+      await client.query(
+        `INSERT INTO coin_purchases (coin_id, purchase_date, price, qty, source, notes)
+         SELECT c.id, c.acquired_date, c.paid, COALESCE(c.qty, 1),
+                'initial_import', 'Auto-backfilled from coins row at migration time'
+         FROM coins c
+         WHERE NOT EXISTS (SELECT 1 FROM coin_purchases p WHERE p.coin_id = c.id)`,
       );
     }
 

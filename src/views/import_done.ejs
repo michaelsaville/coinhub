@@ -1,0 +1,54 @@
+<%- include('_head') %>
+  <div class="wizard-steps">
+    <span>1. Upload</span>
+    <span>2. Map columns</span>
+    <span>3. Preview</span>
+    <span class="active">4. Done</span>
+  </div>
+
+  <h1>Import complete</h1>
+  <p class="meta"><code><%= filename %></code></p>
+
+  <section class="summary-grid">
+    <div class="card">
+      <div class="label">New coins</div>
+      <div class="value ok"><%= summary.inserted.toLocaleString() %></div>
+    </div>
+    <div class="card">
+      <div class="label">Purchases logged</div>
+      <div class="value ok"><%= summary.purchasesAdded.toLocaleString() %></div>
+    </div>
+    <div class="card">
+      <div class="label">Coin rows updated</div>
+      <div class="value warn"><%= summary.overwritten.toLocaleString() %></div>
+    </div>
+    <div class="card">
+      <div class="label">Skipped</div>
+      <div class="value"><%= summary.skipped.toLocaleString() %></div>
+    </div>
+    <div class="card">
+      <div class="label">Invalid</div>
+      <div class="value <%= summary.invalid > 0 ? 'bad' : '' %>"><%= summary.invalid.toLocaleString() %></div>
+    </div>
+  </section>
+
+  <% if (summary.missingSeries && summary.missingSeries.length > 0) { %>
+    <h2>Missing series</h2>
+    <p class="fine">
+      These series names normalized successfully but aren't yet in the
+      <code>coin_series</code> table — those rows were skipped. Add them
+      to <code>scripts/migrate.js</code> SEED_SERIES and re-run
+      <code>npm run migrate</code>, then re-import.
+    </p>
+    <ul>
+      <% [...new Set(summary.missingSeries)].forEach(s => { %>
+        <li><%= s %></li>
+      <% }) %>
+    </ul>
+  <% } %>
+
+  <div class="btn-row">
+    <a href="/" class="btn">← Back to home</a>
+    <a href="/import" class="btn btn-secondary">Import another file</a>
+  </div>
+<%- include('_foot') %>

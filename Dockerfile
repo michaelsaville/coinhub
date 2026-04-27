@@ -7,6 +7,11 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 COPY src ./src
 
+# The import wizard writes session files to /app/data/import-sessions/
+# during multi-step uploads. Pre-create with `node` ownership so the
+# runtime user can write here (/app is root-owned by the COPY above).
+RUN mkdir -p /app/data/import-sessions && chown -R node:node /app/data
+
 ENV NODE_ENV=production
 ENV PORT=3000
 

@@ -1,0 +1,154 @@
+<%- include('_head') %>
+  <p><a href="javascript:history.back()">&larr; back</a></p>
+  <h1>Add a coin</h1>
+
+  <% if (error) { %>
+    <div class="error-banner"><%= error %></div>
+  <% } %>
+
+  <form action="/coins" method="post" class="form-stack add-coin-form" autocomplete="off">
+    <label>
+      <span>Series *</span>
+      <select name="series_id" id="series-select" required>
+        <option value="">— pick a series —</option>
+        <%
+          // Group by type so the picker reads naturally on a phone:
+          // "Penny → Lincoln Cent / Indian Head Penny / …" etc.
+          const byType = new Map();
+          for (const s of series) {
+            if (!byType.has(s.type_id)) byType.set(s.type_id, { name: s.type_name, items: [] });
+            byType.get(s.type_id).items.push(s);
+          }
+        %>
+        <% for (const grp of byType.values()) { %>
+          <optgroup label="<%= grp.name %>">
+            <% for (const s of grp.items) { %>
+              <option value="<%= s.id %>" <%= values.series_id === s.id ? 'selected' : '' %>><%= s.name %></option>
+            <% } %>
+          </optgroup>
+        <% } %>
+      </select>
+    </label>
+
+    <div class="form-row">
+      <label>
+        <span>Year *</span>
+        <input type="number" name="year" inputmode="numeric" min="1700" max="2100" step="1"
+               value="<%= values.year || '' %>" placeholder="e.g. 1881" required />
+      </label>
+      <label>
+        <span>Mint *</span>
+        <select name="mint_id" required>
+          <option value="">— pick —</option>
+          <% for (const m of mints) { %>
+            <option value="<%= m.id %>" <%= values.mint_id === m.id ? 'selected' : '' %>>
+              <%= m.code %><%= m.name && m.code !== m.name ? ` — ${m.name}` : '' %>
+            </option>
+          <% } %>
+        </select>
+      </label>
+    </div>
+
+    <label>
+      <span>Condition *</span>
+      <select name="condition_id" required>
+        <option value="">— pick condition —</option>
+        <%
+          const byCategory = new Map();
+          for (const c of conditions) {
+            const cat = c.category || 'Other';
+            if (!byCategory.has(cat)) byCategory.set(cat, []);
+            byCategory.get(cat).push(c);
+          }
+        %>
+        <% for (const [cat, items] of byCategory.entries()) { %>
+          <optgroup label="<%= cat %>">
+            <% for (const c of items) { %>
+              <option value="<%= c.id %>" <%= values.condition_id === c.id ? 'selected' : '' %>><%= c.grade %></option>
+            <% } %>
+          </optgroup>
+        <% } %>
+      </select>
+    </label>
+
+    <div class="form-row">
+      <label>
+        <span>Paid</span>
+        <input type="number" name="paid" inputmode="decimal" step="0.01" min="0"
+               value="<%= values.paid ?? '' %>" placeholder="$" />
+      </label>
+      <label>
+        <span>Book value</span>
+        <input type="number" name="book_value" inputmode="decimal" step="0.01" min="0"
+               value="<%= values.book_value ?? '' %>" placeholder="$" />
+      </label>
+    </div>
+
+    <div class="form-row">
+      <label>
+        <span>Acquired date</span>
+        <input type="date" name="acquired_date"
+               value="<%= values.acquired_date || new Date().toISOString().slice(0,10) %>" />
+      </label>
+      <label>
+        <span>Quantity</span>
+        <input type="number" name="qty" inputmode="numeric" step="1" min="1"
+               value="<%= values.qty || 1 %>" />
+      </label>
+    </div>
+
+    <details class="adv-details">
+      <summary>Slab / serial / extra notes (optional)</summary>
+      <div class="form-stack" style="margin-top: 10px;">
+        <label>
+          <span>Serial (custom — leave blank to auto-generate)</span>
+          <input type="text" name="serial" value="<%= values.serial || '' %>"
+                 placeholder="auto: e.g. MOR1881P-AB" autocomplete="off" />
+        </label>
+        <div class="form-row">
+          <label>
+            <span>Grading service</span>
+            <input type="text" name="grading_service" value="<%= values.grading_service || '' %>" placeholder="PCGS, NGC, ANACS…" />
+          </label>
+          <label>
+            <span>Slab serial</span>
+            <input type="text" name="slab_serial" value="<%= values.slab_serial || '' %>" />
+          </label>
+        </div>
+        <label>
+          <span>Notes</span>
+          <textarea name="comment_1" rows="3"><%= values.comment_1 || '' %></textarea>
+        </label>
+      </div>
+    </details>
+
+    <div class="form-actions">
+      <button type="submit" class="btn">Add coin</button>
+      <a href="/" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+
+  <style>
+    /* Mobile-first layering on top of the existing CoinHub palette. */
+    .add-coin-form { max-width: 520px; margin-top: 8px; }
+    .add-coin-form label > span { display: block; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
+    .add-coin-form input, .add-coin-form select, .add-coin-form textarea {
+      width: 100%; padding: 12px 14px; min-height: 48px;
+      background: var(--panel); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 10px;
+      font-size: 1rem; font-family: inherit;
+    }
+    .add-coin-form input:focus, .add-coin-form select:focus, .add-coin-form textarea:focus {
+      outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent);
+    }
+    .add-coin-form .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 480px) { .add-coin-form .form-row { grid-template-columns: 1fr; } }
+    .add-coin-form .form-stack { display: flex; flex-direction: column; gap: 12px; }
+    .add-coin-form .form-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .add-coin-form .btn { padding: 14px 22px; min-height: 48px; font-size: 1rem; border-radius: 10px; border: 0; background: var(--accent); color: var(--bg); font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; }
+    .add-coin-form .btn-secondary { background: var(--panel); color: var(--fg); border: 1px solid var(--border); }
+    .adv-details { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+    .adv-details summary { cursor: pointer; color: var(--accent); font-size: 0.92rem; }
+    .error-banner { background: rgba(220,38,38,0.15); border: 1px solid rgba(220,38,38,0.4); color: #fca5a5; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+  </style>
+<%- include('_foot') %>

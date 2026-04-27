@@ -1,0 +1,15 @@
+<%- include('_head') %>
+  <p><a href="/series/<%= series.id %>">&larr; <%= series.name %></a></p>
+  <h1><%= series.name %> — Gaps</h1>
+  <p class="meta"><%= series.type_name %></p>
+
+  <p>No mintage reference data imported for this series yet. Gap tracking currently covers:</p>
+  <ul class="muted">
+    <li>Jefferson Nickel (1938+)</li>
+    <li>Mercury Dime (1916–1945)</li>
+    <li>Roosevelt Dime (1946+)</li>
+    <li>Washington Quarter (1932+)</li>
+    <li>Kennedy Half (1964+)</li>
+  </ul>
+  <p class="muted">Other series will appear here once their year/mint lists are imported.</p>
+<%- include('_foot') %>

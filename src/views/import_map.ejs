@@ -1,0 +1,54 @@
+<%- include('_head') %>
+  <div class="wizard-steps">
+    <span>1. Upload</span>
+    <span class="active">2. Map columns</span>
+    <span>3. Preview</span>
+    <span>4. Done</span>
+  </div>
+
+  <h1>Map columns</h1>
+  <p class="meta">
+    <code><%= filename %></code> · sheet <code><%= sheetName %></code> ·
+    <%= rowCount.toLocaleString() %> rows
+  </p>
+  <p class="fine">
+    The wizard guessed which column is which. Override anything that's wrong.
+    Required: <span class="target-required">Serial</span>, <span class="target-required">Year</span>.
+    Leave a column unmapped to ignore it on import.
+  </p>
+
+  <% if (error) { %>
+    <div class="error-banner"><%= error %></div>
+  <% } %>
+
+  <form action="/import/<%= sid %>/map" method="post">
+    <% headers.forEach(header => {
+         const samples = sample
+           .map(r => r[header])
+           .filter(v => v !== null && v !== undefined && v !== '')
+           .slice(0, 3)
+           .map(v => String(v))
+           .join(' · ');
+    %>
+      <div class="field-row">
+        <div class="header">
+          <%= header %>
+          <% if (samples) { %><span class="sample"><%= samples %></span><% } %>
+        </div>
+        <select name="map[<%= header %>]">
+          <option value="">— ignore —</option>
+          <% targets.forEach(t => { %>
+            <option value="<%= t.key %>" <%= mapping[header] === t.key ? 'selected' : '' %>>
+              <%= t.label %><%= t.required ? ' *' : '' %>
+            </option>
+          <% }) %>
+        </select>
+      </div>
+    <% }) %>
+
+    <div class="btn-row">
+      <button type="submit" class="btn">Preview →</button>
+      <a href="/import" class="btn btn-secondary">← Re-upload</a>
+    </div>
+  </form>
+<%- include('_foot') %>

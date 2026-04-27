@@ -1,0 +1,61 @@
+<%- include('_head') %>
+  <p><a href="/series/<%= series.id %>">&larr; <%= series.name %></a></p>
+  <h1><%= series.name %> — Gaps</h1>
+  <p class="meta"><%= series.type_name %></p>
+
+  <section class="cards">
+    <div class="card">
+      <div class="label">Owned</div>
+      <div class="value"><%= stats.owned %></div>
+    </div>
+    <div class="card">
+      <div class="label">Missing</div>
+      <div class="value"><%= stats.missing %></div>
+    </div>
+    <div class="card">
+      <div class="label">Complete</div>
+      <div class="value"><%= stats.percent %>%</div>
+    </div>
+  </section>
+
+  <div class="progress"><div class="progress-bar" style="width: <%= stats.percent %>%"></div></div>
+
+  <p class="filter-row">
+    <% if (showMissingOnly) { %>
+      <a href="/series/<%= series.id %>/gaps" class="chip chip-active">Missing only ·</a>
+      <a href="/series/<%= series.id %>/gaps" class="chip">Show all</a>
+    <% } else { %>
+      <a href="/series/<%= series.id %>/gaps" class="chip chip-active">All years</a>
+      <a href="/series/<%= series.id %>/gaps?missing=1" class="chip">Missing only</a>
+    <% } %>
+  </p>
+
+  <% if (rows.length === 0) { %>
+    <p class="muted">Nothing to show with current filter.</p>
+  <% } else { %>
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Year</th>
+          <% mintCodes.forEach(c => { %><th><%= c %></th><% }) %>
+        </tr>
+      </thead>
+      <tbody>
+        <% rows.forEach(r => { %>
+          <tr>
+            <td class="year"><%= r.year %></td>
+            <% r.cells.forEach(cell => { %>
+              <td class="cell <%= !cell.inMintage ? 'na' : (cell.coinId ? 'owned' : 'missing') %>">
+                <% if (!cell.inMintage) { %>—<% } else if (cell.coinId) { %>
+                  <a href="/coins/<%= cell.coinId %>" aria-label="owned">●</a>
+                <% } else { %>
+                  <span aria-label="missing">○</span>
+                <% } %>
+              </td>
+            <% }) %>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
+<%- include('_foot') %>

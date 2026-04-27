@@ -24,4 +24,40 @@
     <% if (coin.photo_filename) { %><dt>Photo ref</dt><dd class="muted"><%= coin.photo_filename %></dd><% } %>
     <dt>Added</dt><dd class="muted"><%= new Date(coin.created_at).toISOString().slice(0,10) %></dd>
   </dl>
+
+  <h2>Purchases (<%= purchases.length %>)</h2>
+  <% if (purchases.length === 0) { %>
+    <p class="muted">No purchase history yet.</p>
+  <% } else { %>
+    <%
+      const totalPaid = purchases.reduce((sum, p) => sum + (p.price ? Number(p.price) * (p.qty || 1) : 0), 0);
+      const totalQty = purchases.reduce((sum, p) => sum + (p.qty || 1), 0);
+    %>
+    <p class="fine">
+      <%= totalQty %> coin<%= totalQty === 1 ? '' : 's' %> purchased ·
+      total spent <strong>$<%= totalPaid.toFixed(2) %></strong>
+    </p>
+    <table class="preview">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Source</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% purchases.forEach(p => { %>
+          <tr>
+            <td><%= p.purchase_date ? new Date(p.purchase_date).toISOString().slice(0,10) : '—' %></td>
+            <td><%= p.qty ?? 1 %></td>
+            <td><%= p.price != null ? '$' + Number(p.price).toFixed(2) : '—' %></td>
+            <td class="muted"><%= p.source ?? '' %></td>
+            <td class="muted"><%= p.notes ?? '' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } %>
 <%- include('_foot') %>
